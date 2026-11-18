@@ -48,3 +48,4 @@ Thumbs.db
 !.env.example
 /server/uploads/
 /server/dist/
+/cloud-function/node_modules/

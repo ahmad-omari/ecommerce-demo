@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { requireUser } from './auth';
 import { db, transaction } from './db';
 import { HttpError, id, quantity, required } from './http';
-import { receivePhotos, removeUploads, saveUploads } from './photos';
+import { receivePhotos, uploadedPhotos } from './multipart';
+import { removeUploads, saveUploads } from './photos';
 
 export const catalog = Router();
 export const itemSelect = `SELECT i.id,i.name,i.title,i.description,i.price,i.stock,i.category_id,i.seller_id,
@@ -65,7 +66,7 @@ function fields(body: Record<string, unknown> = {}) {
 catalog.post('/items', async (req, _res, next) => { await requireUser(req); next(); }, receivePhotos, async (req,res) => {
   const user = await requireUser(req);
   const values = fields(req.body);
-  const keys = await saveUploads(req.files as Express.Multer.File[] ?? []);
+  const keys = await saveUploads(uploadedPhotos(req));
   try {
     const itemId = await transaction(async client => {
       const { rows } = await client.query(`INSERT INTO "AH_items" (name,title,description,price,category_id,stock,seller_id)
@@ -83,7 +84,7 @@ catalog.put('/items/:id', async (req, _res, next) => { await requireUser(req); n
   const user = await requireUser(req);
   const itemId = id(req.params.id);
   const values = fields(req.body);
-  const keys = await saveUploads(req.files as Express.Multer.File[] ?? []);
+  const keys = await saveUploads(uploadedPhotos(req));
   let removed: string[];
   try {
     removed = await transaction(async client => {
