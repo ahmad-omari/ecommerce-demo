@@ -3,10 +3,18 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
+    "start": "npm run dev:frontend",
+    "build": "npm run build:frontend && npm run build:backend",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "dev": "concurrently --kill-others-on-fail -n api,web \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:frontend": "ng serve",
+    "dev:backend": "tsx watch server/main.ts",
+    "build:frontend": "ng build",
+    "build:backend": "tsc -p server/tsconfig.json",
+    "db:init": "docker exec -i ecommerce-postgres psql -X -U postgres -d ecommerce -v ON_ERROR_STOP=1 < database/01_schema.sql",
+    "db:seed": "docker exec -i ecommerce-postgres psql -X -U postgres -d ecommerce -v ON_ERROR_STOP=1 < database/02_seed.sql",
+    "smoke": "node scripts/smoke.mjs"
   },
   "private": true,
   "packageManager": "npm@11.19.1",
@@ -17,6 +25,11 @@
     "@angular/forms": "^22.2.0",
     "@angular/platform-browser": "^22.2.0",
     "@angular/router": "^22.2.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "multer": "^2.5.0",
+    "pg": "^8.23.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
@@ -24,8 +37,14 @@
     "@angular/build": "^22.2.7",
     "@angular/cli": "^22.2.7",
     "@angular/compiler-cli": "^22.2.0",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "concurrently": "^10.0.7",
     "jsdom": "^30.0.0",
     "prettier": "^3.8.1",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "vitest": "^5.0.0"
   }

@@ -1,24 +1,17 @@
+import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { App } from './app';
 
 describe('App', () => {
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
+  it('renders the marketplace navigation', async () => {
+    const fixture = TestBed.configureTestingModule({
       imports: [App],
-    })
-      .compileComponents();
-  });
-
-  it('should create the app', () => {
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
-  });
-
-  it('should render title', async () => {
-    const fixture = TestBed.createComponent(App);
+      providers: [provideRouter([]), provideHttpClient()]
+    }).createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, ecommerce-demo');
+    expect(compiled.querySelector('nav')?.textContent).toContain('Browse');
+    expect(compiled.querySelector('nav')?.textContent).toContain('Cart');
   });
 });
