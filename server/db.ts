@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Connector, IpAddressTypes } from '@google-cloud/cloud-sql-connector';
 import { Pool, PoolClient, PoolConfig, QueryResultRow } from 'pg';
+import { logError } from './error-log';
 
 let pool: Promise<Pool> | undefined;
 
@@ -34,19 +35,21 @@ async function createPool() {
   const config: PoolConfig = { max: 5, connectionTimeoutMillis: 5000 };
   const instanceConnectionName = process.env.INSTANCE_CONNECTION_NAME;
   if (instanceConnectionName) {
-    const credentials = cloudCredentials();
-    const connector = new Connector();
+    let connector: Connector | undefined;
     try {
+      const credentials = cloudCredentials();
+      connector = new Connector();
       const options = await connector.getOptions({ instanceConnectionName, ipType: IpAddressTypes.PRIVATE });
       // The connector supplies a verified TLS socket. Don't negotiate a second TLS layer in pg.
       Object.assign(config, options, credentials, { ssl: false });
     } catch (error) {
-      connector.close();
+      logError('cloud-sql.connector.initialize', error);
+      connector?.close();
       throw error;
     }
   }
   const connectionPool = new Pool(config);
-  connectionPool.on('error', error => console.error('Idle database connection failed', error.name));
+  connectionPool.on('error', error => logError('database.pool.idle', error));
   return connectionPool;
 }
 

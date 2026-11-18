@@ -5,6 +5,7 @@ import { catalog } from './catalog';
 import { shop } from './shop';
 import { readPhoto } from './photos';
 import { HttpError } from './http';
+import { logError } from './error-log';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -18,7 +19,8 @@ app.get('/api/health', async (_req,res) => {
   try {
     await db.query('SELECT 1');
     res.json({ status: 'ok' });
-  } catch {
+  } catch (error) {
+    logError('database.health', error);
     res.status(503).json({ status: 'database unavailable' });
   }
 });
@@ -36,7 +38,7 @@ const errors: ErrorRequestHandler = (error,_req,res,_next) => {
   if (error.code === '23505') { res.status(409).json({ message: 'That name is already in use.' }); return; }
   if (error.code === '23503') { res.status(409).json({ message: 'The selected record is unavailable.' }); return; }
   if (error.status === 400 || error.status === 413) { res.status(error.status).json({ message: 'Invalid request body.' }); return; }
-  console.error('API request failed', error.code ?? error.name);
+  logError('api.unexpected', error);
   res.status(500).json({ message: 'Something went wrong. Please try again.' });
 };
 app.use(errors);

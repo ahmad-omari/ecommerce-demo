@@ -43,6 +43,66 @@ var import_express4 = __toESM(require("express"));
 var import_config = require("dotenv/config");
 var import_cloud_sql_connector = require("@google-cloud/cloud-sql-connector");
 var import_pg = require("pg");
+
+// server/error-log.ts
+var redacted = "[REDACTED]";
+function decode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+function secretValues() {
+  const { DATABASE_URL, PGPASSWORD } = process.env;
+  let urlPassword = "";
+  try {
+    if (DATABASE_URL) urlPassword = new URL(DATABASE_URL).password;
+  } catch {
+  }
+  const values = /* @__PURE__ */ new Set();
+  for (const value of [DATABASE_URL, PGPASSWORD, urlPassword]) {
+    if (!value) continue;
+    const decoded = decode(value);
+    for (const variant of [value, decoded, encodeURIComponent(decoded), JSON.stringify(decoded).slice(1, -1)]) {
+      values.add(variant);
+    }
+  }
+  return [...values].sort((a, b) => b.length - a.length).map((value) => {
+    const literal = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(literal.replace(/%([\da-f])([\da-f])/gi, (_escape, a, b) => "%" + [a, b].map((char) => /[a-f]/i.test(char) ? "[" + char.toLowerCase() + char.toUpperCase() + "]" : char).join("")), "g");
+  });
+}
+function errorFields(error, sanitize, depth = 0) {
+  const entry = error && typeof error === "object" ? error : void 0;
+  return {
+    name: sanitize(entry?.name) ?? "Error",
+    code: sanitize(entry?.code),
+    message: sanitize(entry ? entry.message : error) ?? "No error message available.",
+    ...depth < 3 && entry?.cause != null ? { cause: errorFields(entry.cause, sanitize, depth + 1) } : {},
+    ...depth < 3 && Array.isArray(entry?.errors) ? {
+      errors: entry.errors.slice(0, 3).map((child) => errorFields(child, sanitize, depth + 1))
+    } : {}
+  };
+}
+function logError(stage, error) {
+  const secrets = secretValues();
+  const sanitize = (value) => {
+    if (typeof value !== "string" && typeof value !== "number") return null;
+    let message = String(value);
+    if (/\b(?:authorization|cookies?|set-cookie|(?:access[_ -]?|refresh[_ -]?)?token|password|pgpassword|database_url|request[ _-]?body|connection[ _-]?config(?:uration)?|process\.env)["']?\s*[:=]|\bBearer\s+\S/i.test(message)) {
+      return redacted;
+    }
+    for (const secret of secrets) {
+      message = message.replace(secret, redacted);
+    }
+    message = message.replace(/\bpostgres(?:ql)?:\/\/[^\s"'<>]+/gi, redacted);
+    return message.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 1e3);
+  };
+  console.error(JSON.stringify({ severity: "ERROR", stage, ...errorFields(error, sanitize) }));
+}
+
+// server/db.ts
 var pool;
 function cloudCredentials() {
   const { DATABASE_URL, PGDATABASE, PGUSER, PGPASSWORD } = process.env;
@@ -71,18 +131,20 @@ async function createPool() {
   const config = { max: 5, connectionTimeoutMillis: 5e3 };
   const instanceConnectionName = process.env.INSTANCE_CONNECTION_NAME;
   if (instanceConnectionName) {
-    const credentials = cloudCredentials();
-    const connector = new import_cloud_sql_connector.Connector();
+    let connector;
     try {
+      const credentials = cloudCredentials();
+      connector = new import_cloud_sql_connector.Connector();
       const options2 = await connector.getOptions({ instanceConnectionName, ipType: import_cloud_sql_connector.IpAddressTypes.PRIVATE });
       Object.assign(config, options2, credentials, { ssl: false });
     } catch (error) {
-      connector.close();
+      logError("cloud-sql.connector.initialize", error);
+      connector?.close();
       throw error;
     }
   }
   const connectionPool = new import_pg.Pool(config);
-  connectionPool.on("error", (error) => console.error("Idle database connection failed", error.name));
+  connectionPool.on("error", (error) => logError("database.pool.idle", error));
   return connectionPool;
 }
 function getPool() {
@@ -600,7 +662,8 @@ app.get("/api/health", async (_req, res) => {
   try {
     await db.query("SELECT 1");
     res.json({ status: "ok" });
-  } catch {
+  } catch (error) {
+    logError("database.health", error);
     res.status(503).json({ status: "database unavailable" });
   }
 });
@@ -631,7 +694,7 @@ var errors = (error, _req, res, _next) => {
     res.status(error.status).json({ message: "Invalid request body." });
     return;
   }
-  console.error("API request failed", error.code ?? error.name);
+  logError("api.unexpected", error);
   res.status(500).json({ message: "Something went wrong. Please try again." });
 };
 app.use(errors);
