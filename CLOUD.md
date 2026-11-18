@@ -12,9 +12,10 @@ In Google Cloud Console, select project `ualr-advanced-cloud-computing` and regi
 | Variable | Cloud value |
 | --- | --- |
 | `INSTANCE_CONNECTION_NAME` | `ualr-advanced-cloud-computing:us-central1:class-sql` |
+| `DATABASE_URL` | Expose the existing Secret Manager secret `class-database-url` as this environment variable |
 | `PGDATABASE` | `postgres` |
-| `PGUSER` | Existing PostgreSQL user with access to the application tables |
-| `PGPASSWORD` | Password for that user, supplied from Secret Manager |
+| `PGUSER` | Optional override for the username from `DATABASE_URL` |
+| `PGPASSWORD` | Optional override for the password from `DATABASE_URL` |
 | `PHOTO_STORAGE` | `gcs` |
 | `GCS_BUCKET` | `thompson-bucket` |
 | `GCS_PREFIX` | `ahmad/` |
@@ -22,8 +23,9 @@ In Google Cloud Console, select project `ualr-advanced-cloud-computing` and regi
 
 ## Cloud SQL and networking
 
+- In cloud mode, the function decodes the URI's username, password, and database name. Each nonempty explicit `PG*` credential setting takes precedence over its URI field, so `PGDATABASE=postgres` selects the shared database. The connector controls the network address, port, and TLS. The URI's transport settings are ignored. Local Docker mode continues using the existing `PG*` settings when `INSTANCE_CONNECTION_NAME` is unset.
 - Configure Direct VPC egress with `class-vpc`, subnet `ahmad-private-subnet` (`10.0.4.0/24`), and private ranges only. The Cloud SQL connector selects the instance's private IP (`10.82.192.3`) via the instance connection name and verifies its TLS certificate. This uses the connector's path over TCP 3307, with HTTPS access to the Cloud SQL Admin API over TCP 443. Leave `PGHOST` and `PGPORT` unset for the function. Verify that the VPC and firewall permit the private IP path. [Direct VPC egress](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc) · [Connector networking](https://docs.cloud.google.com/sql/docs/postgres/connect-compute-engine) · [Node.js connector](https://github.com/GoogleCloudPlatform/cloud-sql-nodejs-connector)
-- Verify the Cloud SQL Admin API is enabled and the function runtime identity has `roles/cloudsql.client`. Give the identity access to the required Secret Manager secret. It uses Application Default Credentials from the Cloud Run runtime. Each instance can use up to five PostgreSQL connections, so set the function's maximum instances with the shared database capacity in mind. [Cloud SQL access](https://docs.cloud.google.com/sql/docs/postgres/connect-run) · [Cloud Run secrets](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
+- Verify the Cloud SQL Admin API is enabled and the function runtime identity has `roles/cloudsql.client`. Give the identity Secret Manager access to `class-database-url`. It uses Application Default Credentials from the Cloud Run runtime. Each instance can use up to five PostgreSQL connections, so set the function's maximum instances with the shared database capacity in mind. [Cloud SQL access](https://docs.cloud.google.com/sql/docs/postgres/connect-run) · [Cloud Run secrets](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
 - The shared database already contains the quoted `"AH_..."` tables and seed records. Leave the existing data in place and skip the SQL initialization and seed commands for cloud.
 
 ## Private photos

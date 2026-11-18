@@ -44,18 +44,38 @@ var import_config = require("dotenv/config");
 var import_cloud_sql_connector = require("@google-cloud/cloud-sql-connector");
 var import_pg = require("pg");
 var pool;
+function cloudCredentials() {
+  const { DATABASE_URL, PGDATABASE, PGUSER, PGPASSWORD } = process.env;
+  let database = PGDATABASE;
+  let user = PGUSER;
+  let password = PGPASSWORD;
+  if (DATABASE_URL && (!database || !user || !password)) {
+    try {
+      const url = new URL(DATABASE_URL);
+      if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
+        throw new Error();
+      }
+      database ||= decodeURIComponent(url.pathname.slice(1));
+      user ||= decodeURIComponent(url.username);
+      password ||= decodeURIComponent(url.password);
+    } catch {
+      throw new Error("DATABASE_URL must be a valid PostgreSQL URI.");
+    }
+  }
+  if (!database || !user || !password) {
+    throw new Error("Cloud SQL requires a database name, username, and password from DATABASE_URL or PG* settings.");
+  }
+  return { database, user, password };
+}
 async function createPool() {
   const config = { max: 5, connectionTimeoutMillis: 5e3 };
   const instanceConnectionName = process.env.INSTANCE_CONNECTION_NAME;
   if (instanceConnectionName) {
-    const { PGDATABASE, PGUSER, PGPASSWORD } = process.env;
-    if (!PGDATABASE || !PGUSER || !PGPASSWORD) {
-      throw new Error("Cloud SQL requires PGDATABASE, PGUSER, and PGPASSWORD.");
-    }
+    const credentials = cloudCredentials();
     const connector = new import_cloud_sql_connector.Connector();
     try {
       const options2 = await connector.getOptions({ instanceConnectionName, ipType: import_cloud_sql_connector.IpAddressTypes.PRIVATE });
-      Object.assign(config, options2, { database: PGDATABASE, user: PGUSER, password: PGPASSWORD, ssl: false });
+      Object.assign(config, options2, credentials, { ssl: false });
     } catch (error) {
       connector.close();
       throw error;
