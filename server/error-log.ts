@@ -8,14 +8,19 @@ function decode(value: string) {
 function secretValues() {
   const { DATABASE_URL, PGPASSWORD } = process.env;
   let urlPassword = '';
+  let queryPassword: string | null = null;
   try {
-    if (DATABASE_URL) urlPassword = new URL(DATABASE_URL).password;
+    if (DATABASE_URL?.trim()) {
+      const url = new URL(DATABASE_URL.trim());
+      urlPassword = url.password;
+      queryPassword = url.searchParams.getAll('password').at(-1) ?? null;
+    }
   } catch {
     // The complete value is still redacted if URL parsing fails.
   }
 
   const values = new Set<string>();
-  for (const value of [DATABASE_URL, PGPASSWORD, urlPassword]) {
+  for (const value of [DATABASE_URL?.trim(), PGPASSWORD, urlPassword, queryPassword]) {
     if (!value) continue;
     const decoded = decode(value);
     for (const variant of [value, decoded, encodeURIComponent(decoded), JSON.stringify(decoded).slice(1, -1)]) {

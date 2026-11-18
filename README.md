@@ -97,6 +97,6 @@ PHOTO_STORAGE=local COOKIE_SECURE=false npm run dev:function
 SMOKE_URL=http://localhost:8080 npm run smoke
 ```
 
-Leave `INSTANCE_CONNECTION_NAME` unset for PostgreSQL on Docker. Running from the repository root lets the function read the root `.env` and serve the bundled local seed photos. The function listens on port 8080 by default. Set `PORT=8080` when your environment defines a different port. Check `http://localhost:8080/api/health` for connectivity.
+Leave both `INSTANCE_CONNECTION_NAME` and `DATABASE_URL` unset for PostgreSQL on Docker. Running from the repository root lets the function read the root `.env` and serve the bundled local seed photos. The function listens on port 8080 by default. Set `PORT=8080` when your environment defines a different port. Check `http://localhost:8080/api/health` for connectivity.
 
 The console-ready files are `cloud-function/index.js` and `cloud-function/package.json`. Run `npm run build:function` to regenerate them and `npm install --prefix cloud-function --package-lock-only` to refresh the function lockfile when its dependencies change. The deployable function uses the Google Cloud Storage backend. See [CLOUD.md](CLOUD.md) for cloud configuration.

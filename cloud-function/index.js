@@ -43,6 +43,7 @@ var import_express4 = __toESM(require("express"));
 var import_config = require("dotenv/config");
 var import_cloud_sql_connector = require("@google-cloud/cloud-sql-connector");
 var import_pg = require("pg");
+var import_pg_connection_string = require("pg-connection-string");
 
 // server/error-log.ts
 var redacted = "[REDACTED]";
@@ -56,12 +57,17 @@ function decode(value) {
 function secretValues() {
   const { DATABASE_URL, PGPASSWORD } = process.env;
   let urlPassword = "";
+  let queryPassword = null;
   try {
-    if (DATABASE_URL) urlPassword = new URL(DATABASE_URL).password;
+    if (DATABASE_URL?.trim()) {
+      const url = new URL(DATABASE_URL.trim());
+      urlPassword = url.password;
+      queryPassword = url.searchParams.getAll("password").at(-1) ?? null;
+    }
   } catch {
   }
   const values = /* @__PURE__ */ new Set();
-  for (const value of [DATABASE_URL, PGPASSWORD, urlPassword]) {
+  for (const value of [DATABASE_URL?.trim(), PGPASSWORD, urlPassword, queryPassword]) {
     if (!value) continue;
     const decoded = decode(value);
     for (const variant of [value, decoded, encodeURIComponent(decoded), JSON.stringify(decoded).slice(1, -1)]) {
@@ -105,13 +111,14 @@ function logError(stage, error) {
 // server/db.ts
 var pool;
 function cloudCredentials() {
-  const { DATABASE_URL, PGDATABASE, PGUSER, PGPASSWORD } = process.env;
+  const { PGDATABASE, PGUSER, PGPASSWORD } = process.env;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
   let database = PGDATABASE;
   let user = PGUSER;
   let password = PGPASSWORD;
-  if (DATABASE_URL && (!database || !user || !password)) {
+  if (databaseUrl && (!database || !user || !password)) {
     try {
-      const url = new URL(DATABASE_URL);
+      const url = new URL(databaseUrl);
       if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
         throw new Error();
       }
@@ -127,9 +134,51 @@ function cloudCredentials() {
   }
   return { database, user, password };
 }
+function directConfig(databaseUrl) {
+  let url;
+  try {
+    url = new URL(databaseUrl);
+    if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new Error();
+  } catch {
+    throw new Error("DATABASE_URL must be a valid PostgreSQL URI.");
+  }
+  const sslMode = url.searchParams.getAll("sslmode").at(-1) ?? "verify-full";
+  if (!["require", "verify-ca", "verify-full"].includes(sslMode)) {
+    throw new Error("Direct PostgreSQL requires sslmode=require, verify-ca, or verify-full.");
+  }
+  url.searchParams.set("sslmode", sslMode);
+  url.searchParams.delete("uselibpqcompat");
+  if (sslMode === "verify-ca" && !url.searchParams.get("sslrootcert")) {
+    throw new Error("sslmode=verify-ca requires a CA file configured with sslrootcert.");
+  }
+  let parsed;
+  try {
+    parsed = (0, import_pg_connection_string.parse)(url.href, { useLibpqCompat: true });
+  } catch {
+    throw new Error("Could not parse DATABASE_URL or read its TLS files.");
+  }
+  const { host, ssl } = parsed;
+  const portText = parsed.port || "5432";
+  const port = Number(portText);
+  if (!host || host.startsWith("/") || !/^\d+$/.test(portText) || port < 1 || port > 65535) {
+    throw new Error("Direct PostgreSQL requires a TCP host and a valid port in DATABASE_URL.");
+  }
+  if (!ssl || typeof ssl !== "object") {
+    throw new Error("Direct PostgreSQL requires TLS.");
+  }
+  return {
+    host,
+    port,
+    database: process.env.PGDATABASE || parsed.database || void 0,
+    user: process.env.PGUSER || parsed.user,
+    password: process.env.PGPASSWORD || parsed.password,
+    ssl: { ...ssl, cert: ssl.cert ?? void 0, rejectUnauthorized: ssl.rejectUnauthorized !== false }
+  };
+}
 async function createPool() {
   const config = { max: 5, connectionTimeoutMillis: 5e3 };
   const instanceConnectionName = process.env.INSTANCE_CONNECTION_NAME;
+  const databaseUrl = process.env.DATABASE_URL?.trim();
   if (instanceConnectionName) {
     let connector;
     try {
@@ -140,6 +189,13 @@ async function createPool() {
     } catch (error) {
       logError("cloud-sql.connector.initialize", error);
       connector?.close();
+      throw error;
+    }
+  } else if (databaseUrl !== void 0) {
+    try {
+      Object.assign(config, directConfig(databaseUrl));
+    } catch (error) {
+      logError("database.direct.configure", error);
       throw error;
     }
   }

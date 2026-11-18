@@ -11,7 +11,7 @@ In Google Cloud Console, select project `ualr-advanced-cloud-computing` and regi
 
 | Variable | Cloud value |
 | --- | --- |
-| `INSTANCE_CONNECTION_NAME` | `ualr-advanced-cloud-computing:us-central1:class-sql` |
+| `INSTANCE_CONNECTION_NAME` | Leave unset for direct PostgreSQL. Set to `ualr-advanced-cloud-computing:us-central1:class-sql` only to select the connector |
 | `DATABASE_URL` | Expose the existing Secret Manager secret `class-database-url` as this environment variable |
 | `PGDATABASE` | `postgres` |
 | `PGUSER` | Optional override for the username from `DATABASE_URL` |
@@ -21,11 +21,12 @@ In Google Cloud Console, select project `ualr-advanced-cloud-computing` and regi
 | `GCS_PREFIX` | `ahmad/` |
 | `COOKIE_SECURE` | `true` |
 
-## Cloud SQL and networking
+## Direct PostgreSQL and networking
 
-- In cloud mode, the function decodes the URI's username, password, and database name. Each nonempty explicit `PG*` credential setting takes precedence over its URI field, so `PGDATABASE=postgres` selects the shared database. The connector controls the network address, port, and TLS. The URI's transport settings are ignored. Local Docker mode continues using the existing `PG*` settings when `INSTANCE_CONNECTION_NAME` is unset.
-- Configure Direct VPC egress with `class-vpc`, subnet `ahmad-private-subnet` (`10.0.4.0/24`), and private ranges only. The Cloud SQL connector selects the instance's private IP (`10.82.192.3`) via the instance connection name and verifies its TLS certificate. This uses the connector's path over TCP 3307, with HTTPS access to the Cloud SQL Admin API over TCP 443. Leave `PGHOST` and `PGPORT` unset for the function. Verify that the VPC and firewall permit the private IP path. [Direct VPC egress](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc) · [Connector networking](https://docs.cloud.google.com/sql/docs/postgres/connect-compute-engine) · [Node.js connector](https://github.com/GoogleCloudPlatform/cloud-sql-nodejs-connector)
-- Verify the Cloud SQL Admin API is enabled and the function runtime identity has `roles/cloudsql.client`. Give the identity Secret Manager access to `class-database-url`. It uses Application Default Credentials from the Cloud Run runtime. Each instance can use up to five PostgreSQL connections, so set the function's maximum instances with the shared database capacity in mind. [Cloud SQL access](https://docs.cloud.google.com/sql/docs/postgres/connect-run) · [Cloud Run secrets](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
+- Expose the existing `class-database-url` secret as `DATABASE_URL` and give the runtime identity access to that secret. Leave `INSTANCE_CONNECTION_NAME` unset. The application uses the URI's host and port (default 5432) with PostgreSQL authentication, so this path requires zero Cloud SQL Admin API calls or Cloud SQL Client IAM permissions. Explicit nonempty `PGDATABASE`, `PGUSER`, and `PGPASSWORD` override the corresponding decoded URI values. [Cloud Run secrets](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
+- Configure Direct VPC egress with `class-vpc`, subnet `ahmad-private-subnet` (`10.0.4.0/24`), and private ranges only. Verify the URI's host resolves to the intended private destination and the VPC can reach the URI's port. The confirmed Cloud SQL private address is `10.82.192.3`. [Direct VPC egress](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc) · [Cloud SQL networking](https://docs.cloud.google.com/sql/docs/postgres/connect-compute-engine)
+- The shared URI's `sslmode=require` follows libpq compatibility semantics. Without a configured CA, it encrypts the connection without verifying the server certificate. With `sslrootcert`, it verifies the certificate chain. `verify-ca` requires a readable CA file, and `verify-full` verifies both the chain and server identity. If the URI omits `sslmode`, the app defaults to `verify-full`. Direct connections always require TLS. [PostgreSQL SSL modes](https://www.postgresql.org/docs/current/libpq-ssl.html)
+- Setting `INSTANCE_CONNECTION_NAME` selects the existing connector first. It supplies the private network transport and verified TLS, using `DATABASE_URL` only as a credential fallback. Connector mode requires the Cloud SQL Admin API, `roles/cloudsql.client`, TCP 3307 to the instance, and HTTPS access to the Cloud SQL Admin API. With both variables unset, the application uses the local Docker `PG*` settings. Each function instance can use up to five PostgreSQL connections. [Cloud SQL access](https://docs.cloud.google.com/sql/docs/postgres/connect-run) · [Node.js connector](https://github.com/GoogleCloudPlatform/cloud-sql-nodejs-connector)
 - The shared database already contains the quoted `"AH_..."` tables and seed records. Leave the existing data in place and skip the SQL initialization and seed commands for cloud.
 
 ## Private photos
