@@ -19,7 +19,7 @@ In Google Cloud Console, select project `ualr-advanced-cloud-computing` and regi
 | `PHOTO_STORAGE` | `gcs` |
 | `GCS_BUCKET` | `thompson-bucket` |
 | `GCS_PREFIX` | `ahmad/` |
-| `COOKIE_SECURE` | `true` |
+| `COOKIE_SECURE` | `false` for the initial HTTP VM demo, `true` when the storefront uses HTTPS |
 
 ## Direct PostgreSQL and networking
 
@@ -35,4 +35,4 @@ Give the runtime identity object read, create, and delete permissions scoped to 
 
 ## Angular, API Gateway, and HTTPS
 
-Serve `dist/ecommerce-demo/browser` on the public web VM over HTTPS with an Angular route fallback to `index.html`. Reverse proxy `/api/**` through API Gateway with unchanged routes, query strings, cookies, and response `Set-Cookie` headers. Configure the gateway to forward requests to the function and use an ID token with the function URL as its audience. Grant `roles/run.invoker` on the backing Cloud Run service to the gateway's service account and use ingress that admits gateway traffic. IAM authorizes the gateway to invoke the function. The application separately authenticates the shopper using its PostgreSQL-backed session cookie. [Backend authorization](https://docs.cloud.google.com/api-gateway/docs/securing-backend-services) · [Cloud Run function invocation](https://docs.cloud.google.com/functions/docs/securing/authenticating)
+For the initial HTTP demo, run `npm run package:vm` locally to create `marketplace-ah-vm.tar.gz` in the project root. The script builds `dist/ecommerce-demo/browser` and verifies the pinned Linux amd64 Caddy release archive against the official checksums before extracting the binary. Upload the bundle and follow the [VM installer instructions](deploy/vm/README.md). Caddy serves HTTP on port 9090 and proxies `/api` and `/api/*` over HTTPS with unchanged routes, query strings, cookies, and response `Set-Cookie` headers. Configure the gateway to forward requests to the function and use an ID token with the function URL as its audience. Grant `roles/run.invoker` on the backing Cloud Run service to the gateway's service account and use ingress that admits gateway traffic. IAM authorizes the gateway to invoke the function. The application separately authenticates the shopper using its PostgreSQL-backed session cookie. [Backend authorization](https://docs.cloud.google.com/api-gateway/docs/securing-backend-services) · [Cloud Run function invocation](https://docs.cloud.google.com/functions/docs/securing/authenticating)

@@ -1,0 +1,22 @@
+[Unit]
+Description=My Marketplace web frontend on port 9090
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+User=aalomari
+WorkingDirectory=/home/aalomari/marketplace-ah
+Environment=XDG_DATA_HOME=/home/aalomari/marketplace-ah/state
+Environment=XDG_CONFIG_HOME=/home/aalomari/marketplace-ah/state
+ExecStart=/home/aalomari/marketplace-ah/caddy run --config /home/aalomari/marketplace-ah/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=3s
+TimeoutStartSec=30s
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aalomari/marketplace-ah/state
+
+[Install]
+WantedBy=multi-user.target

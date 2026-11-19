@@ -1,0 +1,20 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+http://:9090 {
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy https://marketplace-ah-gateway-44kcm5yz.uc.gateway.dev {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle {
+		root * /home/aalomari/marketplace-ah/www
+		try_files {path} /index.html
+		file_server
+	}
+}
